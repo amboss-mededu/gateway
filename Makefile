@@ -9,8 +9,8 @@ build-setup:
 	# When building cmd/gateway in CI, always use the current version of the gateway.
 	set -ex; \
 		cd cmd/gateway; \
-		go mod edit -replace github.com/nautilus/gateway=../..; \
-		go mod download github.com/nautilus/gateway
+		go mod edit -replace github.com/amboss-mededu/gateway=../..; \
+		go mod download github.com/amboss-mededu/gateway
 	rm -rf bin && mkdir bin
 
 .PHONY: build

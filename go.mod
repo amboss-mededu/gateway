@@ -1,4 +1,4 @@
-module github.com/nautilus/gateway
+module github.com/amboss-mededu/gateway
 
 go 1.17
 

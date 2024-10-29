@@ -1,4 +1,4 @@
-module github.com/nautilus/gateway/examples
+module github.com/amboss-mededu/gateway/examples
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

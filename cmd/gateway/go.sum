@@ -69,10 +69,10 @@ github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh
 github.com/mitchellh/mapstructure v1.3.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxdASFVQag=
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
-github.com/nautilus/gateway v0.3.8 h1:GYFt0g90NolYF4SlKHBIhfZgVxC3jsUOHWnUZwhKmL8=
-github.com/nautilus/gateway v0.3.8/go.mod h1:IX2V2WawZFJcMcCn/wTZYEXx1PwFcYeyPSllLp3vzhU=
-github.com/nautilus/gateway v0.3.17 h1:3FsbAA5etepEjOjVUjWEMkrTRWGNXCQtxsz8ws0PpVw=
-github.com/nautilus/gateway v0.3.17/go.mod h1:LiuwdbQT3twmNCYlQvbRxA2zuCPHtIXKee41jtbGwP0=
+github.com/amboss-mededu/gateway v0.3.8 h1:GYFt0g90NolYF4SlKHBIhfZgVxC3jsUOHWnUZwhKmL8=
+github.com/amboss-mededu/gateway v0.3.8/go.mod h1:IX2V2WawZFJcMcCn/wTZYEXx1PwFcYeyPSllLp3vzhU=
+github.com/amboss-mededu/gateway v0.3.17 h1:3FsbAA5etepEjOjVUjWEMkrTRWGNXCQtxsz8ws0PpVw=
+github.com/amboss-mededu/gateway v0.3.17/go.mod h1:LiuwdbQT3twmNCYlQvbRxA2zuCPHtIXKee41jtbGwP0=
 github.com/nautilus/graphql v0.0.20/go.mod h1:UYcs/gBtuFrZyX591SuYboby4xFNG9ZkaTYk7BBSRak=
 github.com/nautilus/graphql v0.0.23 h1:uiQV2SxOfl63xNr4E5Qk9IxecD2llM/gVqKbM2lEHcw=
 github.com/nautilus/graphql v0.0.23/go.mod h1:eoqPxo/+IdRSfLQKZ2V0al2vYeoMJKO72XpTsUYOmFI=

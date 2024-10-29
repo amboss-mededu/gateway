@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/nautilus/gateway"
+	"github.com/amboss-mededu/gateway"
 	"github.com/nautilus/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 )
