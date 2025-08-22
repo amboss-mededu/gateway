@@ -164,6 +164,12 @@ func executeStep(
 ) {
 	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, resultLock, queryVariables)
 	// before publishing the current result, tell the wait-group about the dependent steps to wait for
+
+	if queryResult["login"] != nil {
+		fmt.Println(queryResult["login"].(map[string]interface{})["token"].(string))
+		ctx.RequestContext = context.WithValue(ctx.RequestContext, "token", queryResult["login"].(map[string]interface{})["token"].(string))
+	}
+
 	stepWg.Add(len(dependentSteps))
 	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
