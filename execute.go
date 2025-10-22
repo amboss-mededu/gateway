@@ -35,8 +35,11 @@ type queryExecutionResult struct {
 	Err            error
 }
 
-// StepHook is a function that can be executed before or after a step
-type StepHook func(ctx *ExecutionContext) error
+// PreExecutionStepHook is a function that can be executed before step
+type PreExecutionStepHook func(ctx *ExecutionContext) error
+
+// PostExecutionStepHook is a function that can be executed before step
+type PostExecutionStepHook func(ctx *ExecutionContext, queryResult map[string]interface{}) error
 
 // execution is broken up into two phases:
 // - the first walks down the dependency graph execute the network request
@@ -51,8 +54,8 @@ type ExecutionContext struct {
 	Variables          map[string]interface{}
 	RequestContext     context.Context
 	RequestMiddlewares []graphql.NetworkMiddleware
-	PreExecutionHook   StepHook
-	PostExecutionHook  StepHook
+	PreExecutionHook   PreExecutionStepHook
+	PostExecutionHook  PostExecutionStepHook
 }
 
 // Execute returns the result of the query plan
@@ -320,7 +323,7 @@ func executeOneStep(
 					ctx.logger.Warn("Post-execution hook panicked: ", r)
 				}
 			}()
-			if hookErr := ctx.PostExecutionHook(ctx); hookErr != nil {
+			if hookErr := ctx.PostExecutionHook(ctx, queryResult); hookErr != nil {
 				ctx.logger.Warn("Post-execution hook failed: ", hookErr)
 				// Continue execution even if post-hook fails, but log the error
 			}
