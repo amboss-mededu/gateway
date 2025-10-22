@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nautilus/gateway"
+	"github.com/amboss-mededu/gateway"
 	"github.com/nautilus/graphql"
 )
 

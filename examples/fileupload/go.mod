@@ -1,4 +1,4 @@
-module github.com/nautilus/gateway/example/fileupload
+module github.com/amboss-mededu/gateway/example/fileupload
 
 go 1.14
 

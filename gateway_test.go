@@ -153,7 +153,7 @@ func TestGateway(t *testing.T) {
 		t.Parallel()
 		logger := &DefaultLogger{}
 
-		go func() { // verify no race condition between Gateway instances (singleton): https://github.com/nautilus/gateway/issues/154
+		go func() { // verify no race condition between Gateway instances (singleton): https://github.com/amboss-mededu/gateway/issues/154
 			_, err := New(sources, WithLogger(logger))
 			if err != nil {
 				t.Error(err.Error())
@@ -685,7 +685,7 @@ func TestFieldURLs_concat(t *testing.T) {
 	assert.Equal(t, []string{"url2"}, urlLocations3)
 }
 
-// Verifies fix for https://github.com/nautilus/gateway/issues/199
+// Verifies fix for https://github.com/amboss-mededu/gateway/issues/199
 func TestIncludeIfVariable(t *testing.T) {
 	t.Parallel()
 	schema, err := graphql.LoadSchema(`
@@ -754,7 +754,7 @@ type User {
 	`, resp.Body.String())
 }
 
-// TestDataAndErrorsBothReturnFromOneServicePartialSuccess verifies fix for https://github.com/nautilus/gateway/issues/212
+// TestDataAndErrorsBothReturnFromOneServicePartialSuccess verifies fix for https://github.com/amboss-mededu/gateway/issues/212
 func TestDataAndErrorsBothReturnFromOneServicePartialSuccess(t *testing.T) {
 	t.Parallel()
 	schema, err := graphql.LoadSchema(`
@@ -803,7 +803,7 @@ type Query {
 	`, resp.Body.String())
 }
 
-// TestGatewayRunsResponseMiddlewaresOnError verifies part of fix for https://github.com/nautilus/gateway/issues/212
+// TestGatewayRunsResponseMiddlewaresOnError verifies part of fix for https://github.com/amboss-mededu/gateway/issues/212
 // The issue included the 'id' field not getting scrubbed when an error was returned, and scrubbing is a builtin response middleware.
 func TestGatewayRunsResponseMiddlewaresOnError(t *testing.T) {
 	t.Parallel()
@@ -855,7 +855,7 @@ type Query {
 	assert.True(t, executedResponseMiddleware, "All response middleware should run, even on responses with errors")
 }
 
-// TestPartialSuccessAlsoResolvesValidNodeIDs verifies fix for https://github.com/nautilus/gateway/issues/214
+// TestPartialSuccessAlsoResolvesValidNodeIDs verifies fix for https://github.com/amboss-mededu/gateway/issues/214
 func TestPartialSuccessAlsoResolvesValidNodeIDs(t *testing.T) {
 	t.Parallel()
 	schemaFoo, err := graphql.LoadSchema(`
