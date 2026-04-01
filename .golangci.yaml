@@ -2,6 +2,7 @@ version: "2"
 linters:
   enable:
     - bodyclose
+    - copyloopvar
     - durationcheck
     - errname
     - errorlint
@@ -30,10 +31,12 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # Template parsing is slow, so some global templates are ok
       - linters:
           - gochecknoglobals
         text: .*Template is a global variable
         source: .*Template = template\.Must\(.*
+      # Allow const duplication in tests.
       - linters:
           - goconst
         path: .+_test\.go
