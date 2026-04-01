@@ -16,6 +16,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type contextKey string
+
+const tokenContextKey contextKey = "token"
+
 // Common type names for manipulating schemas
 const (
 	typeNameQuery        = "Query"
@@ -222,7 +226,7 @@ func executeStep(
 
 	if queryResult["login"] != nil {
 		fmt.Println(queryResult["login"].(map[string]interface{})["token"].(string))
-		childCtx = childCtx.withRequestContext(context.WithValue(childCtx.RequestContext, "token", queryResult["login"].(map[string]interface{})["token"].(string)))
+		childCtx = childCtx.withRequestContext(context.WithValue(childCtx.RequestContext, tokenContextKey, queryResult["login"].(map[string]interface{})["token"].(string)))
 	}
 
 	stepWg.Add(len(dependentSteps))
