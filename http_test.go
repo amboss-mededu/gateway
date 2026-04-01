@@ -498,14 +498,14 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	aField := &QueryField{
 		Name: "a",
 		Type: ast.NamedType("User", &ast.Position{}),
-		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+		Resolver: func(_ context.Context, _ map[string]interface{}) (string, error) {
 			return "a", nil
 		},
 	}
 	bField := &QueryField{
 		Name: "b",
 		Type: ast.NamedType("User", &ast.Position{}),
-		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+		Resolver: func(_ context.Context, _ map[string]interface{}) (string, error) {
 			return "b", nil
 		},
 	}

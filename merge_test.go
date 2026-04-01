@@ -236,9 +236,10 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 		// look for the definitions
 		for _, field := range definition.Fields {
-			if field.Name == "firstName" {
+			switch field.Name {
+			case "firstName":
 				firstNameDefinition = field
-			} else if field.Name == "lastName" {
+			case "lastName":
 				lastNameDefinition = field
 			}
 		}

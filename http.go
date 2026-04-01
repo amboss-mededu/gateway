@@ -263,7 +263,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		operationsJSON, err := io.ReadAll(r.Body)
 		if err != nil {
 			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
-			return
+			return operations, batchMode, payloadErr
 		}
 		return parseOperations(operationsJSON)
 	case "multipart/form-data":
@@ -272,7 +272,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		parseErr := r.ParseMultipartForm(maxPartSize)
 		if parseErr != nil {
 			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
-			return
+			return operations, batchMode, payloadErr
 		}
 
 		operationsJSON := []byte(r.Form.Get("operations"))
@@ -281,14 +281,14 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		var filePosMap map[string][]string
 		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
 			payloadErr = errors.New("error parsing file map " + err.Error())
-			return
+			return operations, batchMode, payloadErr
 		}
 
 		for filePos, paths := range filePosMap {
 			file, header, err := r.FormFile(filePos)
 			if err != nil {
 				payloadErr = errors.New("file with index not found: " + filePos)
-				return
+				return operations, batchMode, payloadErr
 			}
 
 			fileMeta := graphql.Upload{
@@ -298,13 +298,13 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 
 			if err := injectFile(operations, fileMeta, paths, batchMode); err != nil {
 				payloadErr = err
-				return
+				return operations, batchMode, payloadErr
 			}
 		}
-		return
+		return operations, batchMode, payloadErr
 	default:
 		payloadErr = errors.New("unknown content-type: " + contentType)
-		return
+		return operations, batchMode, payloadErr
 	}
 }
 
