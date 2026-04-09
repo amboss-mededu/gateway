@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/amboss-mededu/gateway v0.3.17
-	github.com/nautilus/graphql v0.0.26
+	github.com/nautilus/graphql v0.0.27
 	github.com/spf13/cobra v0.0.5
 )
 
@@ -15,6 +15,7 @@ require (
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/graph-gophers/dataloader v5.0.0+incompatible // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect

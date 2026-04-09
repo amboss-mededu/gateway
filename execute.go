@@ -16,6 +16,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type contextKey string
+
+const tokenContextKey contextKey = "token"
+
 // Common type names for manipulating schemas
 const (
 	typeNameQuery        = "Query"
@@ -222,7 +226,7 @@ func executeStep(
 
 	if queryResult["login"] != nil {
 		fmt.Println(queryResult["login"].(map[string]interface{})["token"].(string))
-		childCtx = childCtx.withRequestContext(context.WithValue(childCtx.RequestContext, "token", queryResult["login"].(map[string]interface{})["token"].(string)))
+		childCtx = childCtx.withRequestContext(context.WithValue(childCtx.RequestContext, tokenContextKey, queryResult["login"].(map[string]interface{})["token"].(string)))
 	}
 
 	stepWg.Add(len(dependentSteps))
@@ -301,7 +305,7 @@ func executeOneStep(
 
 		// if we dont have an id
 		if pointData.ID == "" {
-			return nil, nil, fmt.Errorf("Could not find id in path")
+			return nil, nil, fmt.Errorf("could not find id in path")
 		}
 
 		// save the id as a variable to the query
@@ -356,7 +360,7 @@ func executeOneStep(
 
 		resultObj, ok := extractedResult.(map[string]interface{})
 		if !ok {
-			return nil, nil, fmt.Errorf("Query result of node query was not an object: %v", queryResult)
+			return nil, nil, fmt.Errorf("query result of node query was not an object: %v", queryResult)
 		}
 
 		queryResult = resultObj
@@ -481,7 +485,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 
 		if rootValue == nil {
 			if selectionType.NonNull {
-				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
+				err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
 				ctx.logger.Warn(err)
 				return nil, err
 			}
@@ -494,7 +498,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 			// make sure the root value is a list
 			rootList, ok := rootValue.([]interface{})
 			if !ok {
-				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
+				return nil, fmt.Errorf("root value of result chunk was not a list: %v", rootValue)
 			}
 			// build up a new list of insertion points
 			var newInsertionPoints [][]string
@@ -527,7 +531,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 							// look for an id
 							id, ok := resultEntry["id"]
 							if !ok {
-								return nil, errors.New("Could not find the id for elements in target list")
+								return nil, errors.New("could not find the id for elements in target list")
 							}
 
 							// add the id to the entry so that the executor can use it to form its query
@@ -575,7 +579,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				for i := range oldBranch {
 					entry, ok := rootList[i].(map[string]interface{})
 					if !ok {
-						return nil, errors.New("Item in root list isn't a map")
+						return nil, errors.New("item in root list isn't a map")
 					}
 
 					// look up the id of the object
@@ -583,7 +587,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 					id, ok := entry["id"]
 					resultLock.Unlock()
 					if !ok {
-						return nil, errors.New("Could not find the id for the object")
+						return nil, errors.New("could not find the id for the object")
 					}
 
 					// ctx.logger.Debug("Adding id to ", oldBranch[i][pointI])
@@ -594,14 +598,14 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 			} else {
 				rootObj, ok := rootValue.(map[string]interface{})
 				if !ok {
-					return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+					return nil, fmt.Errorf("root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
 				}
 
 				for i := range oldBranch {
 					// look up the id of the object
 					id := rootObj["id"]
 					if !ok {
-						return nil, errors.New("Could not find the id for the object")
+						return nil, errors.New("could not find the id for the object")
 					}
 
 					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
@@ -637,7 +641,7 @@ func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, 
 
 			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, fmt.Errorf("List was not a child of an object. %v", pointData)
+				return nil, fmt.Errorf("list was not a child of an object. %v", pointData)
 			}
 
 			// if the field does not exist
