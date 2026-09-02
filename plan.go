@@ -249,6 +249,32 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 				// now that we're done processing the step we need to preconstruct the query that we
 				// will be firing for this plan
 
+				// the operation's directives only travel to the services that
+				// declare them for the operation type this step executes as.
+				// That is the step's own operation type, not the client's: a
+				// dependent step of a mutation re-enters through node(id:),
+				// which is a Query field, so a MUTATION-only directive must
+				// not tag along (see plannerBuildQuery).
+				//
+				// Only the operation position is filtered here. Directives on
+				// fields, fragment spreads, and inline fragments are still
+				// copied verbatim into every step that contains them
+				// (pre-existing behavior), so those still reach services that
+				// never declared them.
+				directives := ctx.Gateway.directivesFor(
+					payload.Location,
+					operationDirectiveLocation(operationForParentType(step.ParentType)),
+					plan.Operation.Directives,
+				)
+
+				// variables referenced by a forwarded directive's arguments
+				// have to be declared and sent along like any field variable
+				for _, directive := range directives {
+					for _, variable := range graphql.ExtractVariables(directive.Arguments) {
+						step.Variables.Add(variable)
+					}
+				}
+
 				// we need to grab the list of variable definitions
 				variableDefs := ast.VariableDefinitionList{}
 				// we need to grab the variable definitions and values for each variable in the step
@@ -258,7 +284,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 				}
 
 				// build up the query document
-				step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
+				step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions, directives)
 
 				// we also need to turn the query into a string
 				queryString, err := graphql.PrintQuery(step.QueryDocument)
@@ -992,22 +1018,28 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 // executeOneStep (value injection) for the three coupled sites.
 const nodeIDVariable = "_gateway_node_id"
 
-func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
+// operationForParentType is the operation type of the query a step executes
+// as: only a step rooted at the top-level mutation or subscription type keeps
+// that operation, every other step is a query (see plannerBuildQuery for why).
+func operationForParentType(parentType string) ast.Operation {
+	switch parentType {
+	case typeNameMutation:
+		return ast.Mutation
+	case typeNameSubscription:
+		return ast.Subscription
+	default:
+		return ast.Query
+	}
+}
+
+func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList, directives ast.DirectiveList) *ast.QueryDocument {
 	ctx.Gateway.logger.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
 		VariableDefinitions: variables,
 		Name:                operationName,
-	}
-
-	// assign the right operation
-	switch parentType {
-	case typeNameMutation:
-		operation.Operation = ast.Mutation
-	case typeNameSubscription:
-		operation.Operation = ast.Subscription
-	default:
-		operation.Operation = ast.Query
+		Directives:          directives,
+		Operation:           operationForParentType(parentType),
 	}
 
 	// if we are querying an operation all we need to do is add the selection set at the root
