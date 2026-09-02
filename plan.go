@@ -433,28 +433,55 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				// add any possible selections provided by this fields selections
-				subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
-					stepCh:         config.stepCh,
-					stepWg:         config.stepWg,
-					step:           config.step,
-					locations:      config.locations,
-					parentLocation: config.parentLocation,
-					plan:           config.plan,
+				typeName := coreFieldType(selection).Name()
+				subSelectionTypes := make(map[string]ast.SelectionSet)
+				if ctx.Schema.Types[typeName].Kind == ast.Union {
+					// Union types MUST be object types, and can't have fields of their own:
+					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
+					// > - https://spec.graphql.org/October2021/#sec-Unions
+					//
+					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
+					// For these cases, union selections MUST collapse into selected fragments on the union's named types.
+					for _, subSelection := range selection.SelectionSet {
+						switch subSelection := subSelection.(type) {
+						case *ast.InlineFragment:
+							subSelectionTypes[subSelection.TypeCondition] = append(subSelectionTypes[subSelection.TypeCondition], subSelection.SelectionSet...)
+						case *ast.FragmentSpread:
+							fragment := config.step.FragmentDefinitions.ForName(selection.Name)
+							subSelectionTypes[fragment.TypeCondition] = append(subSelectionTypes[fragment.TypeCondition], fragment.SelectionSet...)
+						default:
+							return nil, fmt.Errorf("unsupported selection type inside union: %T", subSelection)
+						}
+					}
+				} else {
+					subSelectionTypes[typeName] = selection.SelectionSet
+				}
+				var subSelections ast.SelectionSet
+				for typeName, selectionSet := range subSelectionTypes {
+					// add any possible selections provided by this fields selections
+					subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
+						stepCh:         config.stepCh,
+						stepWg:         config.stepWg,
+						step:           config.step,
+						locations:      config.locations,
+						parentLocation: config.parentLocation,
+						plan:           config.plan,
 
-					parentType:     coreFieldType(selection).Name(),
-					selection:      selection.SelectionSet,
-					insertionPoint: insertionPoint,
-					wrapper:        wrapper,
-				})
-				if err != nil {
-					return nil, err
+						parentType:     typeName,
+						selection:      selectionSet,
+						insertionPoint: insertionPoint,
+						wrapper:        wrapper,
+					})
+					if err != nil {
+						return nil, err
+					}
+					subSelections = append(subSelections, subSelection...)
 				}
 
-				ctx.Gateway.logger.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
+				ctx.Gateway.logger.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelections))
 
 				// overwrite the selection set for this selection
-				selection.SelectionSet = subSelection
+				selection.SelectionSet = subSelections
 			} else {
 				ctx.Gateway.logger.Debug("found a scalar")
 			}
@@ -621,7 +648,7 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 }
 
 // selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
-func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *extractSelectionConfig) string {
+func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName string, possibleLocations []string, config *extractSelectionConfig) string {
 	// if this field can only be found in one location
 	if len(possibleLocations) == 1 {
 		return possibleLocations[0]
@@ -647,6 +674,7 @@ func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *e
 
 	// if we got here then this field can be found in multiple services and none of the top priority locations.
 	// for now, just use the first one
+	ctx.Gateway.logger.WithFields(LoggerFields{"locations": possibleLocations, "field": fmt.Sprintf("%s.%s", config.parentType, fieldName)}).Debug("Multiple locations available for field, but none have priority; arbitrarily selecting first one")
 	return possibleLocations[0]
 }
 
@@ -677,7 +705,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 				return nil, nil, err
 			}
 
-			location := p.selectLocation(possibleLocations, config)
+			location := p.selectLocation(ctx, selection.Name, possibleLocations, config)
 			locationFields[location] = append(locationFields[location], field)
 		case *ast.FragmentSpread:
 			ctx.Gateway.logger.Debug("Encountered fragment spread ", selection.Name)
@@ -718,7 +746,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 						return nil, nil, err
 					}
 
-					fieldLocation := p.selectLocation(fieldLocations, config)
+					fieldLocation := p.selectLocation(ctx, field.Name, fieldLocations, config)
 					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:
@@ -764,7 +792,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 					}
 
 					// add the field to the location, respecting parent location priority
-					fieldLocation := p.selectLocation(fieldLocations, config)
+					fieldLocation := p.selectLocation(ctx, fragmentSelection.Name, fieldLocations, config)
 					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], fragmentSelection)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:

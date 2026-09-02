@@ -18,7 +18,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.9.0
+          version: v2.11
 
   build:
     name: Build release binaries
@@ -43,7 +43,6 @@ jobs:
     strategy:
       matrix:
         go:
-          - 1.24.x
           - 1.25.x
           - ^1.26  # Latest version of Go
     steps:
