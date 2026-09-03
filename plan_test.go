@@ -3,6 +3,7 @@ package gateway
 import (
 	"fmt"
 	"iter"
+	"sort"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
 )
 
 func TestPlanQuery_singleRootField(t *testing.T) {
@@ -1921,11 +1923,147 @@ query ($id: ID!) {
 			assert.Equal(t, strings.TrimSpace(`
 query {
 	foo {
-		id
-	}
-}`), strings.TrimSpace(step.QueryString))
+		... on Bar {
+			id
 		}
 	}
+}`), strings.TrimSpace(step.QueryString), "the id needed for the node lookup must stay inside the member type fragment, a union has no id field")
+		}
+	}
+}
+
+// Regression test: when the union field and all of its members' fields live on one service, the planner must
+// send the typed fragments through unchanged. Flattening `... on Bar { bar }` into `bar` produces a query
+// that is invalid against the union type.
+func TestPlanQuery_unionSingleLocationKeepsTypeConditions(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			foo: Foo!
+		}
+		union Foo = Bar | Baz
+		type Bar {
+			id: ID!
+			bar: String!
+		}
+		type Baz {
+			id: ID!
+			baz: String!
+		}
+	`)
+	require.NoError(t, err)
+
+	const location = "url0"
+	locations := FieldURLMap{}
+	locations.RegisterURL(typeNameQuery, "foo", location)
+	locations.RegisterURL("Bar", "id", location)
+	locations.RegisterURL("Bar", "bar", location)
+	locations.RegisterURL("Baz", "id", location)
+	locations.RegisterURL("Baz", "baz", location)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query {
+				foo {
+					... on Bar {
+						bar
+					}
+					... on Baz {
+						baz
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	require.NoError(t, err)
+
+	assertPlannedQueries(t, map[string][]string{
+		location: {`
+			query {
+				foo {
+					... on Bar {
+						bar
+					}
+					... on Baz {
+						baz
+					}
+				}
+			}
+		`},
+	}, plans)
+}
+
+// assertPlannedQueries asserts that executing the plans sends exactly the expected queries to each
+// downstream service (keyed by URL) and nothing else. Queries are compared ignoring the order of
+// selections within a selection set, because the planner groups union sub-selections by type in a map.
+func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
+	t.Helper()
+	actual := map[string][]string{}
+	for _, plan := range plans {
+		// the root step only fans out to its children and never queries a service itself
+		for _, rootChild := range plan.RootStep.Then {
+			for step := range allSteps(rootChild) {
+				url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
+				actual[url] = append(actual[url], step.QueryString)
+			}
+		}
+	}
+	assert.Equal(t, normalizeQueries(t, expected), normalizeQueries(t, actual))
+}
+
+func normalizeQueries(t *testing.T, queries map[string][]string) map[string][]string {
+	t.Helper()
+	normalized := map[string][]string{}
+	for url, urlQueries := range queries {
+		for _, query := range urlQueries {
+			normalized[url] = append(normalized[url], normalizeQuery(t, query))
+		}
+		sort.Strings(normalized[url])
+	}
+	return normalized
+}
+
+// normalizeQuery parses a GraphQL document, recursively sorts every selection set, and prints it back
+func normalizeQuery(t *testing.T, query string) string {
+	t.Helper()
+	doc, err := parser.ParseQuery(&ast.Source{Input: query})
+	require.NoError(t, err, "query must be valid GraphQL: %s", query)
+	for _, operation := range doc.Operations {
+		sortSelectionSet(operation.SelectionSet)
+	}
+	for _, fragment := range doc.Fragments {
+		sortSelectionSet(fragment.SelectionSet)
+	}
+	printed, err := graphql.PrintQuery(doc)
+	require.NoError(t, err)
+	return strings.TrimSpace(printed)
+}
+
+func sortSelectionSet(selectionSet ast.SelectionSet) {
+	for _, selection := range selectionSet {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			sortSelectionSet(selection.SelectionSet)
+		case *ast.InlineFragment:
+			sortSelectionSet(selection.SelectionSet)
+		}
+	}
+	sort.SliceStable(selectionSet, func(i, j int) bool {
+		return printSelection(selectionSet[i]) < printSelection(selectionSet[j])
+	})
+}
+
+func printSelection(selection ast.Selection) string {
+	printed, err := graphql.PrintQuery(&ast.QueryDocument{
+		Operations: ast.OperationList{{Operation: ast.Query, SelectionSet: ast.SelectionSet{selection}}},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return printed
 }
 
 func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {

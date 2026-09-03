@@ -419,15 +419,18 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				typeName := coreFieldType(selection).Name()
+				fieldTypeName := coreFieldType(selection).Name()
 				subSelectionTypes := make(map[string]ast.SelectionSet)
-				if ctx.Schema.Types[typeName].Kind == ast.Union {
+				isUnion := ctx.Schema.Types[fieldTypeName].Kind == ast.Union
+				if isUnion {
 					// Union types MUST be object types, and can't have fields of their own:
 					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
 					// > - https://spec.graphql.org/October2021/#sec-Unions
 					//
 					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
-					// For these cases, union selections MUST collapse into selected fragments on the union's named types.
+					// For these cases, union selections MUST collapse into selected fragments on the union's named types,
+					// so that each member type's fields are planned against the member type (not the union).
+					// The planned fields are wrapped back into an inline fragment on the member type below.
 					for _, subSelection := range selection.SelectionSet {
 						switch subSelection := subSelection.(type) {
 						case *ast.InlineFragment:
@@ -440,7 +443,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 						}
 					}
 				} else {
-					subSelectionTypes[typeName] = selection.SelectionSet
+					subSelectionTypes[fieldTypeName] = selection.SelectionSet
 				}
 				var subSelections ast.SelectionSet
 				for typeName, selectionSet := range subSelectionTypes {
@@ -460,6 +463,13 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					})
 					if err != nil {
 						return nil, err
+					}
+					if isUnion && typeName != fieldTypeName && len(subSelection) > 0 {
+						// Fields of a union member type are only valid inside a fragment on that member type
+						subSelection = ast.SelectionSet{&ast.InlineFragment{
+							TypeCondition: typeName,
+							SelectionSet:  subSelection,
+						}}
 					}
 					subSelections = append(subSelections, subSelection...)
 				}
