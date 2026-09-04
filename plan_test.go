@@ -1579,7 +1579,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 
 	// the query we're building goes to the top level Query object
 	ctx := &PlanningContext{Gateway: &Gateway{logger: &DefaultLogger{}}}
-	operation := plannerBuildQuery(ctx, "hoopla", typeNameQuery, variables, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery(ctx, "hoopla", typeNameQuery, variables, selection, ast.FragmentDefinitionList{}, nil)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1620,7 +1620,7 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 	// the query we're building goes to the User object
 	ctx := &PlanningContext{Gateway: &Gateway{logger: &DefaultLogger{}}}
-	operation := plannerBuildQuery(ctx, "", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery(ctx, "", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{}, nil)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -2246,4 +2246,236 @@ func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) boo
 		}
 	}
 	return true
+}
+
+// stepQueriesByURL indexes the queries the planner built for each service, so
+// tests don't depend on step order.
+func stepQueriesByURL(t *testing.T, steps []*QueryPlanStep) map[string]string {
+	t.Helper()
+	queryByService := map[string]string{}
+	for _, step := range steps {
+		queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+		if !ok {
+			t.Fatalf("step has unexpected queryer type %T", step.Queryer)
+		}
+		queryByService[queryer.URL()] = step.QueryString
+	}
+	return queryByService
+}
+
+func TestPlanQuery_operationDirectivesOnlyGoToDeclaringService(t *testing.T) {
+	t.Parallel()
+
+	schemaA, err := graphql.LoadSchema(`
+		directive @secret on QUERY
+		type Query { foo: Boolean }
+	`)
+	require.NoError(t, err)
+
+	schemaB, err := graphql.LoadSchema(`
+		type Query { bar: Boolean }
+	`)
+	require.NoError(t, err)
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaA, URL: "A"},
+		{Schema: schemaB, URL: "B"},
+	})
+	require.NoError(t, err)
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query:     `query Name @secret { foo bar }`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	require.NoError(t, err)
+
+	// the plan's root step is only a placeholder; its Then steps hold the
+	// query the planner built for each service
+	assert.Equal(t, map[string]string{
+		"A": "query Name @secret {\n\tfoo\n}\n",
+		"B": "query Name {\n\tbar\n}\n",
+	}, stepQueriesByURL(t, plans[0].RootStep.Then))
+}
+
+func TestPlanQuery_operationDirectivesUnionSourcesSharingURL(t *testing.T) {
+	t.Parallel()
+
+	// one service, configured as two sources that each declare a directive;
+	// the service declares both, so both have to travel
+	schema1, err := graphql.LoadSchema(`
+		directive @secret on QUERY
+		type Query { foo: Boolean }
+	`)
+	require.NoError(t, err)
+
+	schema2, err := graphql.LoadSchema(`
+		directive @track on QUERY
+		type Query { bar: Boolean }
+	`)
+	require.NoError(t, err)
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schema1, URL: "A"},
+		{Schema: schema2, URL: "A"},
+	})
+	require.NoError(t, err)
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query:     `query Name @secret @track { foo bar }`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, plans[0].RootStep.Then, 1)
+	assert.Equal(t, "query Name @secret @track {\n\tfoo\n\tbar\n}\n", plans[0].RootStep.Then[0].QueryString)
+}
+
+func TestPlanQuery_operationDirectiveVariablesAreForwarded(t *testing.T) {
+	t.Parallel()
+
+	schemaA, err := graphql.LoadSchema(`
+		directive @track(session: String) on QUERY
+		type Query { foo: Boolean }
+	`)
+	require.NoError(t, err)
+
+	schemaB, err := graphql.LoadSchema(`
+		type Query { bar: Boolean }
+	`)
+	require.NoError(t, err)
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaA, URL: "A"},
+		{Schema: schemaB, URL: "B"},
+	})
+	require.NoError(t, err)
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query:     `query Name($s: String) @track(session: $s) { foo bar }`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	require.NoError(t, err)
+
+	// the query each service receives and the variables whose values travel
+	// with it at execution time
+	type stepShape struct {
+		Query     string
+		Variables Set
+	}
+
+	stepByService := map[string]stepShape{}
+	for _, step := range plans[0].RootStep.Then {
+		queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+		require.True(t, ok, "step has unexpected queryer type %T", step.Queryer)
+		stepByService[queryer.URL()] = stepShape{Query: step.QueryString, Variables: step.Variables}
+	}
+
+	// the directive travels to A, so $s has to be declared there and its
+	// value has to be sent along at execution time; B gets neither
+	assert.Equal(t, map[string]stepShape{
+		"A": {
+			Query:     "query Name ($s: String) @track(session: $s) {\n\tfoo\n}\n",
+			Variables: Set{"s": true},
+		},
+		"B": {
+			Query:     "query Name {\n\tbar\n}\n",
+			Variables: Set{},
+		},
+	}, stepByService)
+}
+
+func TestPlanQuery_dependentStepsDropMutationOnlyDirectives(t *testing.T) {
+	t.Parallel()
+
+	// both services declare @audit, but only for the MUTATION position. The
+	// dependent step for User.lastName executes as a query against B, so
+	// forwarding @audit by name alone would make B reject it.
+	schemaA, err := graphql.LoadSchema(`
+		directive @audit on MUTATION
+		interface Node { id: ID! }
+		type User implements Node { id: ID! firstName: String! }
+		type Mutation { createUser: User }
+		type Query { node(id: ID!): Node }
+	`)
+	require.NoError(t, err)
+
+	schemaB, err := graphql.LoadSchema(`
+		directive @audit on MUTATION
+		interface Node { id: ID! }
+		type User implements Node { id: ID! lastName: String! }
+		type Query { node(id: ID!): Node }
+	`)
+	require.NoError(t, err)
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaA, URL: "A"},
+		{Schema: schemaB, URL: "B"},
+	})
+	require.NoError(t, err)
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query:     `mutation Name @audit { createUser { firstName lastName } }`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	require.NoError(t, err)
+
+	// the mutation step goes to A and keeps the directive; its dependent
+	// step goes to B as a query and has to drop it
+	require.Len(t, plans[0].RootStep.Then, 1)
+	mutationStep := plans[0].RootStep.Then[0]
+	require.Len(t, mutationStep.Then, 1)
+	assert.Equal(t, map[string]string{
+		"mutation step":  "mutation Name @audit {\n\tcreateUser {\n\t\tfirstName\n\t\tid\n\t}\n}\n",
+		"dependent step": "query Name ($_gateway_node_id: ID!) {\n\tnode(id: $_gateway_node_id) {\n\t\t... on User {\n\t\t\tlastName\n\t\t}\n\t}\n}\n",
+	}, map[string]string{
+		"mutation step":  mutationStep.QueryString,
+		"dependent step": mutationStep.Then[0].QueryString,
+	})
+}
+
+func TestPlanQuery_fieldDirectivesStillLeakToNonDeclaringService(t *testing.T) {
+	t.Parallel()
+
+	// Known limitation: only the operation position is filtered. A field
+	// directive is copied into whichever step owns the field, even when that
+	// service never declared it. This test pins the current behavior so the
+	// follow-up that filters field, fragment spread, and inline fragment
+	// positions has something to flip.
+	schemaA, err := graphql.LoadSchema(`
+		directive @secret on FIELD
+		type Query { foo: Boolean }
+	`)
+	require.NoError(t, err)
+
+	schemaB, err := graphql.LoadSchema(`
+		type Query { bar: Boolean }
+	`)
+	require.NoError(t, err)
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaA, URL: "A"},
+		{Schema: schemaB, URL: "B"},
+	})
+	require.NoError(t, err)
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query:     `query Name { foo bar @secret }`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]string{
+		"A": "query Name {\n\tfoo\n}\n",
+		"B": "query Name {\n\tbar @secret\n}\n",
+	}, stepQueriesByURL(t, plans[0].RootStep.Then))
 }
