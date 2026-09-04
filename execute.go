@@ -26,6 +26,9 @@ const (
 	typeNameQuery        = "Query"
 	typeNameMutation     = "Mutation"
 	typeNameSubscription = "Subscription"
+
+	// typenameField is the introspection field every selection set (including unions) may request
+	typenameField = "__typename"
 )
 
 // Executor is responsible for executing a query plan against the remote
