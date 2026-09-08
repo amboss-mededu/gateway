@@ -35,6 +35,8 @@ type Gateway struct {
 	locationPriorities []string
 	preExecutionHook   PreExecutionStepHook
 	postExecutionHook  PostExecutionStepHook
+	preOperationHook   PreOperationHook
+	postOperationHook  PostOperationHook
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -349,6 +351,22 @@ func WithPreExecutionHook(hook PreExecutionStepHook) Option {
 func WithPostExecutionHook(hook PostExecutionStepHook) Option {
 	return func(g *Gateway) {
 		g.postExecutionHook = hook
+	}
+}
+
+// WithPreOperationHook returns an Option that sets a hook run by GraphQLHandler
+// once per operation, before it is planned and executed
+func WithPreOperationHook(hook PreOperationHook) Option {
+	return func(g *Gateway) {
+		g.preOperationHook = hook
+	}
+}
+
+// WithPostOperationHook returns an Option that sets a hook run by GraphQLHandler
+// once per operation, on the payload about to be written for it
+func WithPostOperationHook(hook PostOperationHook) Option {
+	return func(g *Gateway) {
+		g.postOperationHook = hook
 	}
 }
 
