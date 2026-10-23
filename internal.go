@@ -5,7 +5,6 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
@@ -58,7 +57,7 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 			return err
 		}
 		var loadErr gqlerror.List
-		input.QueryDocument, loadErr = gqlparser.LoadQuery(internalSchema, input.Query)
+		input.QueryDocument, loadErr = g.loadQuery(internalSchema, input.Query)
 		if len(loadErr) > 0 {
 			return loadErr
 		}

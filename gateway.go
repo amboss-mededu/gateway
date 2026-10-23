@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/validator/rules"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -37,6 +38,9 @@ type Gateway struct {
 	postExecutionHook  PostExecutionStepHook
 	preOperationHook   PreOperationHook
 	postOperationHook  PostOperationHook
+
+	// replaces gqlparser's default validation rules when an Option customizes them; nil keeps the defaults
+	validationRules *rules.Rules
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware

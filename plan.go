@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/nautilus/graphql"
@@ -101,7 +100,7 @@ type PlanningContext struct {
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (QueryPlanList, error) {
 	// the first thing to do is to parse the query
-	parsedQuery, e := gqlparser.LoadQuery(ctx.Schema, ctx.Query)
+	parsedQuery, e := ctx.Gateway.loadQuery(ctx.Schema, ctx.Query)
 	if e != nil {
 		return nil, e
 	}
