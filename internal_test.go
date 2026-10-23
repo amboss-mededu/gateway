@@ -296,7 +296,7 @@ func TestSchemaIntrospection_missingQueryDocument(t *testing.T) {
 			Query:         "garbage",
 			QueryDocument: nil,
 		}, &result)
-		assert.EqualError(t, err, "input:1: Unexpected Name \"garbage\"\n")
+		assert.EqualError(t, err, "input:1:1: Unexpected Name \"garbage\"\n")
 	})
 }
 
