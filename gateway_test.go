@@ -705,7 +705,7 @@ type User {
 	require.NoError(t, err)
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
-			query := gqlparser.MustLoadQuery(schema, input.Query)
+			query := gqlparser.MustLoadQueryWithRules(schema, input.Query, nil)
 			var operation ast.OperationDefinition
 			if assert.Len(t, query.Operations, 1) {
 				operation = *query.Operations[0]
