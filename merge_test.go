@@ -1561,6 +1561,21 @@ type Query {
 }
 `,
 		},
+		{
+			// graphql-core >= 3.2.11 adds DIRECTIVE_DEFINITION to the built-in @deprecated
+			description: "merge directive definition location as type system location",
+			schema1:     `directive @foo on ARGUMENT_DEFINITION | ENUM_VALUE | FIELD_DEFINITION | INPUT_FIELD_DEFINITION`,
+			schema2:     `directive @foo on ARGUMENT_DEFINITION | DIRECTIVE_DEFINITION | ENUM_VALUE | FIELD_DEFINITION | INPUT_FIELD_DEFINITION`,
+			expectMergedSchema: `
+directive @foo on ARGUMENT_DEFINITION | DIRECTIVE_DEFINITION | ENUM_VALUE | FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
