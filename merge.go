@@ -793,6 +793,7 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 //	  ENUM_VALUE
 //	  INPUT_OBJECT
 //	  INPUT_FIELD_DEFINITION
+//	  DIRECTIVE_DEFINITION (not in October2021; emitted by graphql-core >= 3.2.11 on @deprecated)
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
 	if onlyLeft, onlyRight, areEqualSets := diffSets(
 		potentialExecutableDirectiveLocations(list1),
@@ -841,7 +842,8 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 		ast.LocationEnum,
 		ast.LocationEnumValue,
 		ast.LocationInputObject,
-		ast.LocationInputFieldDefinition:
+		ast.LocationInputFieldDefinition,
+		ast.LocationDirectiveDefinition:
 		return true
 	case
 		ast.LocationQuery,
