@@ -382,9 +382,9 @@ func executeOneStep(
 			}()
 			// PostExecutionStepHook is exported API and execresult is an
 			// internal package, so the hook keeps its map signature. ToMap is
-			// nil-safe and returns a copy, so a hook can no longer mutate the
-			// step result in place.
-			if hookErr := ctx.PostExecutionHook(ctx, queryResult.ToMap()); hookErr != nil {
+			// nil-safe but shares the values no step has touched, so the hook
+			// gets a copy and cannot mutate the step result in place.
+			if hookErr := ctx.PostExecutionHook(ctx, copyResult(queryResult.ToMap()).(map[string]any)); hookErr != nil {
 				ctx.logger.Warn("Post-execution hook failed: ", hookErr)
 				// Continue execution even if post-hook fails, but log the error
 			}
@@ -418,6 +418,32 @@ func executeOneStep(
 		}
 	}
 	return queryResult, dependentSteps, queryErr
+}
+
+// copyResult returns value with every map and list in it copied.
+func copyResult(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		if value == nil {
+			return value
+		}
+		copied := make(map[string]any, len(value))
+		for key, item := range value {
+			copied[key] = copyResult(item)
+		}
+		return copied
+	case []any:
+		if value == nil {
+			return value
+		}
+		copied := make([]any, len(value))
+		for i, item := range value {
+			copied[i] = copyResult(item)
+		}
+		return copied
+	default:
+		return value
+	}
 }
 
 func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDefs ast.FragmentDefinitionList) (*ast.Field, error) {
