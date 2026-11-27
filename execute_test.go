@@ -72,6 +72,42 @@ func TestExecutor_plansOfOne(t *testing.T) {
 	assert.Equal(t, []string{"hello", "world"}, values)
 }
 
+func TestExecutor_postExecutionHookCannotChangeResult(t *testing.T) {
+	t.Parallel()
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger: &DefaultLogger{},
+		PostExecutionHook: func(_ *ExecutionContext, queryResult map[string]any) error {
+			queryResult["user"].(map[string]any)["tags"].([]any)[0] = "changed"
+			return nil
+		},
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						ParentType: typeNameQuery,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "user",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("User", &ast.Position{}),
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{
+							Value: map[string]any{
+								"user": map[string]any{"tags": []any{"foo"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]any{"user": map[string]any{"tags": []any{"foo"}}}, result)
+}
+
 func TestExecutor_plansWithDependencies(t *testing.T) {
 	t.Parallel()
 	// the query we want to execute is
